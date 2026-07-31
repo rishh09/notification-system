@@ -41,10 +41,9 @@ declare global {
     OneSignalDeferred?: Array<
       (oneSignal: OneSignalSdk) => void | Promise<void>
     >;
+    signalDeskOneSignalReady?: Promise<void>;
   }
 }
-
-let initialized = false;
 
 function withOneSignal<T>(
   callback: (oneSignal: OneSignalSdk) => Promise<T>,
@@ -64,13 +63,20 @@ function withOneSignal<T>(
 async function ensureInitialized(oneSignal: OneSignalSdk) {
   const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
   if (!appId) throw new Error("OneSignal is not configured.");
-  if (!initialized) {
-    await oneSignal.init({
-      appId,
-      allowLocalhostAsSecureOrigin: true,
-    });
-    initialized = true;
+  if (!window.signalDeskOneSignalReady) {
+    window.signalDeskOneSignalReady = oneSignal
+      .init({
+        appId,
+        allowLocalhostAsSecureOrigin: true,
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.toLowerCase().includes("already initialized")) return;
+        delete window.signalDeskOneSignalReady;
+        throw error;
+      });
   }
+  await window.signalDeskOneSignalReady;
 }
 
 export async function subscribeBrowser(userId: number): Promise<string> {
