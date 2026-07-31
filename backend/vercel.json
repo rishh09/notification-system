@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "python manage.py migrate && python manage.py seed_demo && python manage.py collectstatic --noinput",
+  "functions": {
+    "config/wsgi.py": {
+      "excludeFiles": "{**/__pycache__/**,**/tests.py,db.sqlite3}"
+    }
+  }
+}
