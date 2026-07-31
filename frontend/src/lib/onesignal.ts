@@ -89,7 +89,7 @@ export async function subscribeBrowser(userId: number): Promise<string> {
     await oneSignal.User.PushSubscription.optIn();
 
     const existing = oneSignal.User.PushSubscription.id;
-    if (existing) return existing;
+    if (existing && oneSignal.User.PushSubscription.optedIn) return existing;
 
     return new Promise<string>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
@@ -97,7 +97,7 @@ export async function subscribeBrowser(userId: number): Promise<string> {
         reject(new Error("The browser subscription was not ready. Please try again."));
       }, 15000);
       const listener = (event: SubscriptionChange) => {
-        if (!event.current.id) return;
+        if (!event.current.id || !event.current.optedIn) return;
         window.clearTimeout(timeout);
         oneSignal.User.PushSubscription.removeEventListener("change", listener);
         resolve(event.current.id);

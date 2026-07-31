@@ -269,6 +269,30 @@ class NotificationApiTests(TestCase):
         self.assertEqual(subscription.device_label, "Refreshed browser")
         self.assertTrue(subscription.is_active)
 
+    def test_refresh_replaces_stale_subscription_for_same_device(self):
+        stale = PushSubscription.objects.get(subscription_id="demo-browser")
+        stale.device_label = "Current browser"
+        stale.save(update_fields=["device_label"])
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            "/api/push/subscriptions/",
+            {
+                "subscription_id": "replacement-browser",
+                "device_label": "Current browser",
+                "is_active": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        stale.refresh_from_db()
+        replacement = PushSubscription.objects.get(
+            subscription_id="replacement-browser"
+        )
+        self.assertFalse(stale.is_active)
+        self.assertTrue(replacement.is_active)
+
     def test_admin_can_create_edit_and_delete_trigger_and_template(self):
         self.client.force_authenticate(self.admin)
         create_trigger = self.client.post(

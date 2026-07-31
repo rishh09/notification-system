@@ -153,10 +153,16 @@ class PushSubscriptionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         subscription_id = serializer.validated_data["subscription_id"]
+        device_label = serializer.validated_data.get("device_label", "")
         defaults = {
-            "device_label": serializer.validated_data.get("device_label", ""),
+            "device_label": device_label,
             "is_active": serializer.validated_data.get("is_active", True),
         }
+        if device_label:
+            PushSubscription.objects.filter(
+                user=self.request.user,
+                device_label=device_label,
+            ).exclude(subscription_id=subscription_id).update(is_active=False)
         instance, _ = PushSubscription.objects.update_or_create(
             subscription_id=subscription_id,
             defaults={"user": self.request.user, **defaults},
