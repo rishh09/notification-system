@@ -2,22 +2,59 @@
 
 SignalDesk is the full-stack notification system described in the backend assignment. It gives users a small website where Login and Logout events occur and gives administrators one Notification Settings matrix for WhatsApp, Email, and browser Web Push.
 
+## Live application
+
+- Frontend: https://notification-system-steel.vercel.app
+- Backend health check: https://notification-system-api.vercel.app/api/health/
+- Source code: https://github.com/rishh09/notification-system
+
 ## Current status
 
-The local application is implemented in safe mock-provider mode:
+The assignment is implemented and deployed with live provider integrations:
 
 - Django API, database models, authentication, and admin endpoints
 - Database-driven Login and Logout triggers
-- WhatsApp, Postmark, and OneSignal provider adapters
+- Twilio WhatsApp Sandbox, Postmark Email, and OneSignal Web Push
 - Generic variable-aware notification dispatcher
 - Next.js user dashboard and notification profile
 - OneSignal browser subscription flow
 - Admin trigger/template matrix
 - Template create, edit, toggle, test-send, WhatsApp sync, and status actions
 - Delivery activity records
-- Automated backend tests and production frontend build
+- 16 passing backend tests and passing frontend lint
+- Next.js frontend and Django backend deployed on Vercel
+- Production PostgreSQL database hosted by Neon
 
-Real sandbox credentials and live Render/Vercel deployments remain deployment checkpoints.
+The final production verification successfully sent the Login notification through WhatsApp, Email, and Web Push. Provider credentials are stored only in deployment environment variables and are not committed to this repository.
+
+## Architecture
+
+```text
+User action (Login/Logout)
+        |
+        v
+Django event trigger
+        |
+        v
+Active database templates
+        |
+        +----> Twilio WhatsApp
+        +----> Postmark Email
+        +----> OneSignal Web Push
+        |
+        v
+Notification delivery audit
+```
+
+The Next.js frontend calls the Django REST API using token authentication. Django stores application data and delivery history in Neon PostgreSQL. Each provider is attempted independently, so one failed channel does not prevent the remaining channels from running.
+
+## Main data models
+
+- **Trigger** — a stable application event such as `user.login` or `user.logout`.
+- **NotificationTemplate** — channel-specific content, variable mappings, and enabled state for a trigger.
+- **UserNotificationProfile** — the user's notification email and WhatsApp number.
+- **PushSubscription** — the user's active OneSignal browser subscription.
+- **NotificationDelivery** — the recipient, provider result, status, error, and timestamp for every attempt.
 
 ## Repository layout
 
@@ -26,7 +63,6 @@ assignment/
 ├── backend/       Django + Django REST Framework
 ├── frontend/      Next.js + TypeScript
 ├── plan.md        Assignment scope and checkpoint tracker
-├── render.yaml    Render Blueprint
 └── README.md
 ```
 
@@ -185,10 +221,10 @@ Create separate OneSignal website configurations for localhost and the deployed 
 
 Temporary Meta tokens expire frequently.
 
-### Temporary Twilio WhatsApp Sandbox
+### Twilio WhatsApp Sandbox
 
-Use this only for local message-delivery testing while Meta developer access is
-unavailable:
+The deployed demo uses Twilio's WhatsApp Sandbox because Meta developer access
+was unavailable during implementation:
 
 ```env
 NOTIFICATION_PROVIDER_MODE=live
@@ -207,8 +243,9 @@ account-specific `TWILIO_WHATSAPP_CONTENT_SID` displayed by the **Try out
 WhatsApp** API panel. In that mode Twilio sends its fixed trial template while
 SignalDesk retains the rendered login/logout content in the delivery audit.
 Twilio Sandbox does not support this application's custom Meta template
-synchronization actions; switch back to `WHATSAPP_PROVIDER=meta` for the final
-assignment verification.
+synchronization actions. Those actions remain available when the application is
+configured with `WHATSAPP_PROVIDER=meta`. The current production demonstration
+uses Twilio's fixed sandbox content template.
 
 ### Postmark
 
@@ -272,15 +309,21 @@ pnpm build
 ```
 
 Provider API calls are mocked in automated tests so tests cannot send real messages.
+The current suite contains 16 passing backend tests, and the frontend lint check
+passes.
 
 ## Assignment demonstration
+
+Before the demonstration, save the member's WhatsApp number and email address
+and enable browser notifications from **My notifications**.
 
 ### Task A
 
 1. Sign in as admin.
 2. Configure all three Login templates.
 3. Test WhatsApp, Email, and Web Push.
-4. Sign in as the member to fire the real Login trigger.
+4. Sign in as the member using **Sign in and fire trigger**.
+5. Verify the WhatsApp, Email, and Web Push delivery records.
 
 ### Task B
 
@@ -305,27 +348,60 @@ Provider API calls are mocked in automated tests so tests cannot send real messa
 
 ## Deployment
 
-### Render
+The production system consists of two Vercel projects connected to one Neon
+PostgreSQL database:
 
-The root `render.yaml` defines the Django service and PostgreSQL database. Configure the provider, host, CORS, and frontend values in Render before switching provider mode to `live`.
+- `notification-system-steel.vercel.app` — Next.js frontend
+- `notification-system-api.vercel.app` — Django REST API
+- Neon — managed PostgreSQL persistence
 
-After the first deployment:
+### Backend on Vercel
 
-```bash
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py seed_demo
-```
+Import the repository as a Vercel project, choose `backend` as its root, and
+configure the Django, Neon, CORS, provider, and demo-account environment
+variables. `backend/vercel.json` runs migrations, seeds the configured demo
+records, and collects static assets during the build.
 
-Do not seed the documented demo passwords on a public production system unless they are overridden.
-
-### Vercel
-
-Import the repository, choose `frontend` as the project root, and set:
+Important production variables include:
 
 ```env
-NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com/api
-NEXT_PUBLIC_ONESIGNAL_APP_ID=your-onesignal-app-id
+DATABASE_URL=
+DJANGO_SECRET_KEY=
+ALLOWED_HOSTS=
+CORS_ALLOWED_ORIGINS=https://notification-system-steel.vercel.app
+CSRF_TRUSTED_ORIGINS=https://notification-system-steel.vercel.app
+FRONTEND_URL=https://notification-system-steel.vercel.app
+NOTIFICATION_PROVIDER_MODE=live
 ```
 
-Add the final Vercel URL to the backend CORS and CSRF trusted-origin settings.
+Provider secrets must be configured in the Vercel environment settings and must
+never be committed. Override both documented local demo passwords before making
+a production deployment public.
+
+### Frontend on Vercel
+
+Import the repository as a second Vercel project, choose `frontend` as its root,
+and set:
+
+```env
+NEXT_PUBLIC_API_URL=https://notification-system-api.vercel.app/api
+NEXT_PUBLIC_ONESIGNAL_APP_ID=
+```
+
+The exact frontend origin must also be configured as the OneSignal Web Push site
+URL. Users must allow browser notifications and subscribe from the dashboard
+before Web Push can be delivered.
+
+## Production verification
+
+The final end-to-end Login run was accepted by all configured providers:
+
+| Channel | Provider | Result |
+| --- | --- | --- |
+| WhatsApp | Twilio Sandbox | Sent |
+| Email | Postmark | Sent |
+| Web Push | OneSignal | Sent |
+
+Delivery results are also available in the administrator's recent activity list.
+Earlier failed diagnostic attempts can remain in this audit history; the latest
+provider status identifies the result of the final run.
